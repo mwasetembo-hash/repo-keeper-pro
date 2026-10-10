@@ -74,6 +74,7 @@ function Dashboard() {
       client.current = c;
       c.onClose = () => { setStatus("off"); setAuto(false); addLog("Disconnected"); };
       await c.connect(appId.trim());
+      await c.send({ time: 1 }); // verifies the App ID is accepted
       const auth = await c.send({ authorize: token.trim() });
       const a = auth.authorize;
       setAccount({ loginid: a.loginid, currency: a.currency, isVirtual: !!a.is_virtual });
