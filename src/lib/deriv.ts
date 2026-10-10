@@ -67,8 +67,8 @@ export type Direction = "CALL" | "PUT";
 export function ema(values: number[], period: number) {
   if (values.length === 0) return 0;
   const k = 2 / (period + 1);
-  let e = values[0];
-  for (let i = 1; i < values.length; i++) e = values[i] * k + e * (1 - k);
+  let e = values[0] ?? 0;
+  for (let i = 1; i < values.length; i++) e = (values[i] ?? e) * k + e * (1 - k);
   return e;
 }
 
@@ -83,7 +83,7 @@ export function computeSignal(prices: number[]): { dir: Direction | null; confid
   const slow = ema(recent, 21);
   const last10 = prices.slice(-11);
   let ups = 0;
-  for (let i = 1; i < last10.length; i++) if (last10[i] > last10[i - 1]) ups++;
+  for (let i = 1; i < last10.length; i++) if ((last10[i] ?? 0) > (last10[i - 1] ?? 0)) ups++;
   const upRatio = ups / 10;
   const spread = Math.abs(fast - slow) / (Math.abs(slow) || 1);
   const strength = Math.min(1, spread * 4000);
