@@ -142,3 +142,33 @@
     color: var(--color-foreground);
   }
 }
+
+/* Trading terminal theme (dark, always on) */
+:root {
+  --background: oklch(0.16 0.02 250);
+  --foreground: oklch(0.95 0.01 250);
+  --card: oklch(0.2 0.025 250);
+  --card-foreground: oklch(0.95 0.01 250);
+  --popover: oklch(0.2 0.025 250);
+  --popover-foreground: oklch(0.95 0.01 250);
+  --primary: oklch(0.78 0.16 75);
+  --primary-foreground: oklch(0.18 0.02 250);
+  --secondary: oklch(0.26 0.03 250);
+  --secondary-foreground: oklch(0.95 0.01 250);
+  --muted: oklch(0.25 0.025 250);
+  --muted-foreground: oklch(0.68 0.03 250);
+  --accent: oklch(0.28 0.03 250);
+  --accent-foreground: oklch(0.95 0.01 250);
+  --destructive: oklch(0.62 0.22 25);
+  --border: oklch(0.3 0.03 250);
+  --input: oklch(0.3 0.03 250);
+  --ring: oklch(0.78 0.16 75);
+  --up: oklch(0.72 0.18 150);
+  --down: oklch(0.65 0.22 25);
+}
+@theme inline {
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
