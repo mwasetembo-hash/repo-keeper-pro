@@ -11,15 +11,38 @@ export class DerivClient {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   onClose: (() => void) | null = null;
 
-  connect(appId: string, endpoint = "ws.derivws.com"): Promise<void> {
+  connect(appId: string, endpoint?: string): Promise<void> {
+    const endpoints = endpoint ? [endpoint] : ["ws.derivws.com", "ws.deriv.com", "ws.binaryws.com"];
+    let lastErr: Error = new Error("Could not reach Deriv.");
+    return endpoints.reduce<Promise<void>>(
+      (chain, ep) =>
+        chain.catch(() =>
+          this.tryEndpoint(ep, appId).catch((e) => {
+            lastErr = e;
+            throw e;
+          }),
+        ),
+      Promise.reject(lastErr),
+    );
+  }
+
+  private tryEndpoint(endpoint: string, appId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(`wss://${endpoint}/websockets/v3?app_id=${encodeURIComponent(appId)}&l=EN`);
       this.ws = ws;
+      const timer = setTimeout(() => {
+        ws.close();
+        reject(new Error(`Timed out reaching ${endpoint}`));
+      }, 10000);
       ws.onopen = () => {
+        clearTimeout(timer);
         this.pingTimer = setInterval(() => this.send({ ping: 1 }).catch(() => {}), 25000);
         resolve();
       };
-      ws.onerror = () => reject(new Error("Could not reach Deriv. Check the App ID."));
+      ws.onerror = () => {
+        clearTimeout(timer);
+        reject(new Error(`Could not reach Deriv (${endpoint}). Check your network and App ID.`));
+      };
       ws.onclose = () => {
         if (this.pingTimer) clearInterval(this.pingTimer);
         this.pending.forEach((p) => p.reject(new Error("Connection closed")));
