@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DerivClient, computeSignal, type Direction } from "@/lib/deriv";
+import { DiagnosePanel } from "@/components/DiagnosePanel";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -289,6 +290,8 @@ function Dashboard() {
             {log.map((l, i) => <div key={i}>{l}</div>)}
           </div>
         </section>
+
+        <DiagnosePanel error={error} log={log} appId={appId} />
       </main>
     </div>
   );
