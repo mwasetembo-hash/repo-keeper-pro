@@ -291,7 +291,7 @@ function Dashboard() {
           </div>
         </section>
 
-        <DiagnosePanel error={error} log={log} appId={cfg.appId} />
+        <DiagnosePanel error={error} log={log} appId={appId} />
       </main>
     </div>
   );
