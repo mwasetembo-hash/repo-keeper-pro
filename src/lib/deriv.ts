@@ -1,8 +1,54 @@
-// Minimal Deriv WebSocket API client (browser-side).
-// Docs: https://api.deriv.com — token is kept in this browser only.
+// Deriv API client (developers.deriv.com): PAT + App ID over REST, then OTP WebSocket.
+// Token is kept in this browser only.
 
 type Handler = (msg: any) => void;
 
+export const DERIV_API = "https://api.derivws.com";
+
+export type DerivAccount = {
+  account_id: string;
+  balance: number;
+  currency: string;
+  group: string;
+  status: "active" | "inactive";
+  account_type: "demo" | "real";
+};
+
+async function derivRest(path: string, appId: string, token: string, method = "GET") {
+  let res: Response;
+  try {
+    res = await fetch(`${DERIV_API}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Deriv-App-ID": appId },
+    });
+  } catch {
+    throw new Error("Could not reach api.derivws.com. Check your internet or disable ad-blockers for this site.");
+  }
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg = body?.errors?.[0]?.message || (typeof body === "string" ? body : "");
+    if (res.status === 401) throw new Error(`Deriv rejected the App ID or token (401). ${msg}`.trim());
+    if (res.status === 403) throw new Error(`Token is missing the "trade" scope (403). ${msg}`.trim());
+    throw new Error(`Deriv error ${res.status}. ${msg}`.trim());
+  }
+  return body;
+}
+
+/** Lists the trader's Options accounts (demo + real) using a PAT and App ID. */
+export async function fetchAccounts(appId: string, token: string): Promise<DerivAccount[]> {
+  const b = await derivRest("/trading/v1/options/accounts", appId, token);
+  return (b?.data ?? []) as DerivAccount[];
+}
+
+/** Gets a one-time authenticated WebSocket URL for one account (valid 120s, single use). */
+export async function fetchOtpUrl(appId: string, token: string, accountId: string): Promise<string> {
+  const b = await derivRest(`/trading/v1/options/accounts/${encodeURIComponent(accountId)}/otp`, appId, token, "POST");
+  const url = b?.data?.url;
+  if (!url) throw new Error("Deriv did not return a trading connection URL.");
+  return url as string;
+}
+
+// WebSocket client for the new Deriv API (wss://api.derivws.com/trading/v1/options/ws/...).
 export class DerivClient {
   private ws: WebSocket | null = null;
   private reqId = 1;
@@ -11,37 +57,23 @@ export class DerivClient {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   onClose: (() => void) | null = null;
 
-  connect(appId: string, endpoint?: string): Promise<void> {
-    const endpoints = endpoint ? [endpoint] : ["ws.derivws.com", "ws.deriv.com", "ws.binaryws.com"];
-    let lastErr: Error = new Error("Could not reach Deriv.");
-    return endpoints.reduce<Promise<void>>(
-      (chain, ep) =>
-        chain.catch(() =>
-          this.tryEndpoint(ep, appId).catch((e) => {
-            lastErr = e;
-            throw e;
-          }),
-        ),
-      Promise.reject(lastErr),
-    );
-  }
-
-  private tryEndpoint(endpoint: string, appId: string): Promise<void> {
+  connect(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`wss://${endpoint}/websockets/v3?app_id=${encodeURIComponent(appId)}&l=EN`);
+      const ws = new WebSocket(url);
       this.ws = ws;
+      const label = url.split("?")[0];
       const timer = setTimeout(() => {
         ws.close();
-        reject(new Error(`Timed out reaching ${endpoint}`));
-      }, 10000);
+        reject(new Error(`Timed out connecting to ${label}`));
+      }, 15000);
       ws.onopen = () => {
         clearTimeout(timer);
-        this.pingTimer = setInterval(() => this.send({ ping: 1 }).catch(() => {}), 25000);
+        this.pingTimer = setInterval(() => this.send({ ping: 1 }).catch(() => {}), 30000);
         resolve();
       };
       ws.onerror = () => {
         clearTimeout(timer);
-        reject(new Error(`Could not reach Deriv (${endpoint}). Check your network and App ID.`));
+        reject(new Error(`Could not open the Deriv trading connection (${label}). An ad-blocker or firewall may be blocking it.`));
       };
       ws.onclose = () => {
         if (this.pingTimer) clearInterval(this.pingTimer);
@@ -79,6 +111,8 @@ export class DerivClient {
   }
 
   close() {
+    if (this.ws) this.ws.onclose = null;
+    if (this.pingTimer) clearInterval(this.pingTimer);
     this.ws?.close();
     this.ws = null;
   }
