@@ -41,6 +41,7 @@ function Dashboard() {
   const [maxLoss, setMaxLoss] = useState(20);
   const [takeProfit, setTakeProfit] = useState(10);
   const [maxTrades, setMaxTrades] = useState(50);
+  const [maxStake, setMaxStake] = useState(10);
   const [auto, setAuto] = useState(false);
   const [busy, setBusy] = useState(false);
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -80,7 +81,7 @@ function Dashboard() {
       c.on("balance", (m) => setBalance(Number(m.balance.balance)));
       await c.send({ balance: 1, subscribe: 1 });
       const s = await c.send({ active_symbols: "brief" });
-      setSymbols((s.active_symbols as any[]).filter((x) => x.exchange_is_open).map((x) => ({ symbol: x.symbol, display_name: x.display_name, market_display_name: x.market_display_name })));
+      setSymbols((s.active_symbols as any[]).map((x) => ({ symbol: x.symbol, display_name: `${x.display_name}${x.exchange_is_open ? "" : " (closed)"}`, market_display_name: x.market_display_name })));
       c.on("tick", (m) => setPrices((p) => [...p, Number(m.tick.quote)].slice(-300)));
       setStatus("on");
       addLog(`Connected ${a.loginid} (${a.is_virtual ? "DEMO" : "REAL"})`);
@@ -150,7 +151,7 @@ function Dashboard() {
     const amt = curStake.current;
     placeTrade(dir, amt).then((r) => {
       if (r == null) return;
-      curStake.current = r > 0 ? stake : Math.min(amt * martingale, stake * 50);
+      curStake.current = r > 0 ? stake : Math.min(amt * martingale, maxStake);
     });
   }, [auto, busy, prices.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -256,6 +257,7 @@ function Dashboard() {
             {num(maxLoss, setMaxLoss, "Loss limit")}
             {num(takeProfit, setTakeProfit, "Profit target")}
             {num(maxTrades, setMaxTrades, "Max trades")}
+            {num(maxStake, setMaxStake, "Max stake (recovery cap)", 0.1)}
           </div>
           {auto ? (
             <button onClick={() => { setAuto(false); addLog("Autopilot OFF"); }} className="w-full rounded-md bg-down py-3 font-bold text-primary-foreground">STOP AUTOPILOT</button>
