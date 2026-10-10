@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DerivClient, computeSignal, type Direction } from "@/lib/deriv";
+import { DerivClient, computeSignal, fetchAccounts, fetchOtpUrl, type DerivAccount, type Direction } from "@/lib/deriv";
 import { DiagnosePanel } from "@/components/DiagnosePanel";
 
 export const Route = createFileRoute("/")({
@@ -25,11 +25,13 @@ const LS = "mwase-deriv-config";
 
 function Dashboard() {
   const client = useRef<DerivClient | null>(null);
-  const [appId, setAppId] = useState("1089");
+  const [appId, setAppId] = useState("");
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<"off" | "connecting" | "on">("off");
   const [error, setError] = useState("");
   const [account, setAccount] = useState<{ loginid: string; currency: string; isVirtual: boolean } | null>(null);
+  const [accounts, setAccounts] = useState<DerivAccount[]>([]);
+  const [accountId, setAccountId] = useState("");
   const [balance, setBalance] = useState<number | null>(null);
   const [symbols, setSymbols] = useState<Sym[]>([]);
   const [symbol, setSymbol] = useState("R_75");
@@ -57,6 +59,7 @@ function Dashboard() {
       const c = JSON.parse(localStorage.getItem(LS) || "{}");
       if (c.appId) setAppId(c.appId);
       if (c.token) setToken(c.token);
+      if (c.accountId) setAccountId(c.accountId);
     } catch {}
   }, []);
 
@@ -68,25 +71,33 @@ function Dashboard() {
   const connect = async () => {
     setError("");
     setStatus("connecting");
-    localStorage.setItem(LS, JSON.stringify({ appId, token }));
     try {
+      const id = appId.trim(), tk = token.trim();
+      if (!id) throw new Error("Enter your App ID from developers.deriv.com.");
+      if (!tk.startsWith("pat_")) throw new Error("Enter a Personal Access Token (starts with pat_) from developers.deriv.com.");
+      addLog("Fetching Deriv accounts…");
+      const list = (await fetchAccounts(id, tk)).filter((a) => a.status === "active");
+      if (!list.length) throw new Error("No active Options accounts found for this token.");
+      setAccounts(list);
+      const acc = list.find((a) => a.account_id === accountId) ?? list.find((a) => a.account_type === "demo") ?? list[0]!;
+      setAccountId(acc.account_id);
+      localStorage.setItem(LS, JSON.stringify({ appId: id, token: tk, accountId: acc.account_id }));
+      const url = await fetchOtpUrl(id, tk, acc.account_id);
       client.current?.close();
       const c = new DerivClient();
       client.current = c;
-      c.onClose = () => { setStatus("off"); setAuto(false); addLog("Disconnected"); };
-      await c.connect(appId.trim());
-      await c.send({ time: 1 }); // verifies the App ID is accepted
-      const auth = await c.send({ authorize: token.trim() });
-      const a = auth.authorize;
-      setAccount({ loginid: a.loginid, currency: a.currency, isVirtual: !!a.is_virtual });
-      setBalance(Number(a.balance));
+      c.onClose = () => { setStatus("off"); setAuto(false); addLog("Disconnected — press Connect to reopen"); };
+      await c.connect(url);
+      const isVirtual = acc.account_type === "demo";
+      setAccount({ loginid: acc.account_id, currency: acc.currency, isVirtual });
+      setBalance(Number(acc.balance));
       c.on("balance", (m) => setBalance(Number(m.balance.balance)));
-      await c.send({ balance: 1, subscribe: 1 });
+      await c.send({ balance: 1, subscribe: 1 }).catch(() => {});
       const s = await c.send({ active_symbols: "brief" });
-      setSymbols((s.active_symbols as any[]).map((x) => ({ symbol: x.symbol, display_name: `${x.display_name}${x.exchange_is_open ? "" : " (closed)"}`, market_display_name: x.market_display_name })));
+      setSymbols((s.active_symbols as any[]).map((x) => ({ symbol: x.underlying_symbol, display_name: `${x.underlying_symbol_name}${x.exchange_is_open ? "" : " (closed)"}`, market_display_name: x.market })));
       c.on("tick", (m) => setPrices((p) => [...p, Number(m.tick.quote)].slice(-300)));
       setStatus("on");
-      addLog(`Connected ${a.loginid} (${a.is_virtual ? "DEMO" : "REAL"})`);
+      addLog(`Connected ${acc.account_id} (${isVirtual ? "DEMO" : "REAL"})`);
     } catch (e: any) {
       setStatus("off");
       setError(e.message || "Connection failed");
@@ -116,7 +127,7 @@ function Dashboard() {
     try {
       const p = await c.send({
         proposal: 1, amount: Number(amount.toFixed(2)), basis: "stake", contract_type: dir,
-        currency: account.currency, duration, duration_unit: "t", symbol,
+        currency: account.currency, duration, duration_unit: "t", underlying_symbol: symbol,
       });
       const b = await c.send({ buy: p.proposal.id, price: Number(amount.toFixed(2)) });
       const id = b.buy.contract_id as number;
@@ -192,10 +203,17 @@ function Dashboard() {
           <label className="block text-xs text-muted-foreground">App ID
             <input value={appId} onChange={(e) => setAppId(e.target.value)} className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-sm text-foreground" />
           </label>
-          <label className="block text-xs text-muted-foreground">API token (needs Read + Trade scope)
+          <label className="block text-xs text-muted-foreground">Personal Access Token (pat_…, needs "trade" scope)
             <input type="password" value={token} onChange={(e) => setToken(e.target.value)} className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-sm text-foreground" />
           </label>
-          <p className="text-xs text-muted-foreground">Saved only in this browser. Use a demo-account token to test; a real-account token trades real money.</p>
+          {accounts.length > 0 && (
+            <label className="block text-xs text-muted-foreground">Account
+              <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-sm text-foreground">
+                {accounts.map((a) => <option key={a.account_id} value={a.account_id}>{a.account_id} · {a.account_type.toUpperCase()} · {a.currency}</option>)}
+              </select>
+            </label>
+          )}
+          <p className="text-xs text-muted-foreground">Get both from developers.deriv.com → Dashboard (register a PAT-type app, then API tokens). Saved only in this browser. Use a demo-account token to test; a real-account token trades real money.</p>
           <button onClick={connect} disabled={status === "connecting"} className="w-full rounded-md bg-primary py-2 font-semibold text-primary-foreground disabled:opacity-50">
             {status === "on" ? "Reconnect" : status === "connecting" ? "Connecting…" : "Connect"}
           </button>
