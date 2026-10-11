@@ -13,51 +13,92 @@ export const Route = createFileRoute("/api/diagnose")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const apiKey = process.env["LOVABLE_API_KEY"];
-        if (!apiKey) return new Response("AI is not configured.", { status: 500 });
         const body = (await request.json().catch(() => null)) as { report?: string } | null;
         const report = (body?.report ?? "").slice(0, 12000).trim();
         if (!report) return new Response("Please describe the error.", { status: 400 });
 
+        // Provider chain: Lovable AI Gateway → direct OpenAI → xAI (OpenAI-compatible).
         let runId: string | undefined;
-        const provider = createOpenAI({
-          baseURL: "https://ai.gateway.lovable.dev/v1",
-          apiKey,
-          headers: { "Lovable-API-Key": apiKey, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
-          fetch: async (input, init) => {
-            const res = await fetch(input, init);
-            runId ??= res.headers.get(RUN) ?? undefined;
-            if (!res.ok) {
-              const msg = await res.clone().text().catch(() => "");
-              throw Object.assign(new Error(msg || `AI error ${res.status}`), { status: res.status });
-            }
-            return res;
-          },
-        });
-
-        const result = streamText({
-          model: provider.responses("openai/gpt-6-astra"),
-          system: INSTRUCTIONS,
-          messages: [{ role: "user", content: report }],
-          abortSignal: request.signal,
-          maxRetries: 0,
-          providerOptions: {
-            openai: {
-              forceReasoning: true,
-              reasoningEffort: "low",
-              reasoningSummary: "auto",
-              store: false,
-              include: ["reasoning.encrypted_content"],
+        const chain: { id: string; provider: ReturnType<typeof createOpenAI>; model: string }[] = [];
+        const gatewayKey = process.env["LOVABLE_API_KEY"];
+        if (gatewayKey) {
+          const provider = createOpenAI({
+            baseURL: "https://ai.gateway.lovable.dev/v1",
+            apiKey: gatewayKey,
+            headers: { "Lovable-API-Key": gatewayKey, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
+            fetch: async (input, init) => {
+              const res = await fetch(input, init);
+              runId ??= res.headers.get(RUN) ?? undefined;
+              if (!res.ok) {
+                const msg = await res.clone().text().catch(() => "");
+                throw Object.assign(new Error(msg || `AI error ${res.status}`), { status: res.status });
+              }
+              return res;
             },
-          },
-          onError: ({ error }) => console.error("diagnose error", error),
-        });
+          });
+          chain.push({ id: "gateway", provider, model: "openai/gpt-6-astra" });
+        }
+        const openaiKey = process.env["OPENAI_API_KEY"];
+        if (openaiKey) {
+          chain.push({
+            id: "openai",
+            provider: createOpenAI({ apiKey: openaiKey }),
+            model: "gpt-4.1-mini",
+          });
+        }
+        const xaiKey = process.env["XAI_API_KEY"];
+        if (xaiKey) {
+          chain.push({
+            id: "xai",
+            provider: createOpenAI({ baseURL: "https://api.x.ai/v1", apiKey: xaiKey }),
+            model: "grok-4-fast",
+          });
+        }
+        if (chain.length === 0) return new Response("AI is not configured.", { status: 500 });
 
-        const res = result.toTextStreamResponse({
-          headers: { "Cache-Control": "no-cache, no-transform" },
-        });
-        if (runId) res.headers.set(RUN, runId);
-        return res;
+        for (const entry of chain) {
+          try {
+            if (entry.id === "gateway") {
+              const result = streamText({
+                model: entry.provider.responses(entry.model),
+                system: INSTRUCTIONS,
+                messages: [{ role: "user", content: report }],
+                abortSignal: request.signal,
+                maxRetries: 0,
+                providerOptions: {
+                  openai: {
+                    forceReasoning: true,
+                    reasoningEffort: "low",
+                    reasoningSummary: "auto",
+                    store: false,
+                    include: ["reasoning.encrypted_content"],
+                  },
+                },
+                onError: ({ error }) => console.error(`diagnose error [${entry.id}]`, error),
+              });
+              const res = result.toTextStreamResponse({
+                headers: { "Cache-Control": "no-cache, no-transform" },
+              });
+              if (runId) res.headers.set(RUN, runId);
+              return res;
+            }
+            // Direct OpenAI / xAI: plain chat-completions streaming, no gateway extras.
+            const result = streamText({
+              model: entry.provider(entry.model),
+              system: INSTRUCTIONS,
+              messages: [{ role: "user", content: report }],
+              abortSignal: request.signal,
+              maxRetries: 0,
+              onError: ({ error }) => console.error(`diagnose error [${entry.id}]`, error),
+            });
+            return result.toTextStreamResponse({
+              headers: { "Cache-Control": "no-cache, no-transform" },
+            });
+          } catch (err) {
+            console.error(`provider [${entry.id}] unavailable, trying next`, err);
+          }
+        }
+        return new Response("All AI providers are unreachable right now.", { status: 502 });
       },
     },
   },
