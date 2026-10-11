@@ -251,6 +251,15 @@ function Dashboard() {
                   {signal.dir === "CALL" ? "▲ UP" : signal.dir === "PUT" ? "▼ DOWN" : "WAIT"} <span className="font-mono text-base">{signal.confidence}%</span>
                 </div>
                 <div className="text-xs text-muted-foreground">{signal.note}</div>
+                <ul className="mt-2 space-y-0.5 text-xs">
+                  {signal.parts.map((p) => (
+                    <li key={p.name} className="flex gap-2">
+                      <span className={p.bias === "CALL" ? "text-up" : p.bias === "PUT" ? "text-down" : "text-muted-foreground"}>{p.bias === "CALL" ? "▲" : p.bias === "PUT" ? "▼" : "•"}</span>
+                      <span className="text-muted-foreground">{p.name}:</span>
+                      <span>{p.detail}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
               <div className="flex gap-2">
                 <button disabled={status !== "on" || busy} onClick={() => placeTrade("CALL", stake)} className="rounded-md bg-up px-6 py-3 font-bold text-primary-foreground disabled:opacity-40">▲ UP</button>
