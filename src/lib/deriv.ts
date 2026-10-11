@@ -129,27 +129,86 @@ export function ema(values: number[], period: number) {
   return e;
 }
 
+function rsi(values: number[], period = 14) {
+  if (values.length <= period) return 50;
+  let gain = 0, loss = 0;
+  const s = values.slice(-(period + 1));
+  for (let i = 1; i < s.length; i++) {
+    const d = (s[i] ?? 0) - (s[i - 1] ?? 0);
+    if (d > 0) gain += d; else loss -= d;
+  }
+  if (loss === 0) return 100;
+  return 100 - 100 / (1 + gain / loss);
+}
+
+/** Group ticks into pseudo-candles of n ticks. */
+function candles(prices: number[], n = 5) {
+  const out: { o: number; h: number; l: number; c: number }[] = [];
+  for (let i = 0; i + n <= prices.length; i += n) {
+    const s = prices.slice(i, i + n);
+    out.push({ o: s[0] ?? 0, c: s[s.length - 1] ?? 0, h: Math.max(...s), l: Math.min(...s) });
+  }
+  return out;
+}
+
+export type SignalPart = { name: string; score: number; bias: Direction | null; detail: string };
+
 /**
- * Tick-trend signal: fast/slow EMA alignment + recent tick direction ratio.
- * Returns direction and confidence 0-100. Not a guarantee of results.
+ * Multi-signal confluence: Triple EMA trend (35%), RSI momentum (20%),
+ * SMC fair value gaps / order blocks (30%), tick velocity (15%).
+ * Confidence = weighted agreement with the dominant direction. Not a guarantee.
  */
-export function computeSignal(prices: number[]): { dir: Direction | null; confidence: number; note: string } {
-  if (prices.length < 30) return { dir: null, confidence: 0, note: "Collecting ticks…" };
-  const recent = prices.slice(-60);
-  const fast = ema(recent, 5);
-  const slow = ema(recent, 21);
-  const last10 = prices.slice(-11);
+export function computeSignal(prices: number[]): { dir: Direction | null; confidence: number; note: string; parts: SignalPart[] } {
+  if (prices.length < 60) return { dir: null, confidence: 0, note: "Collecting ticks…", parts: [] };
+  const recent = prices.slice(-200);
+  const last = recent[recent.length - 1] ?? 0;
+
+  // 1. Triple EMA
+  const e9 = ema(recent, 9), e21 = ema(recent, 21), e50 = ema(recent, 50);
+  let trend: SignalPart;
+  if (e9 > e21 && e21 > e50) trend = { name: "Trend EMA 9/21/50", score: 1, bias: "CALL", detail: "Stacked bullish" };
+  else if (e9 < e21 && e21 < e50) trend = { name: "Trend EMA 9/21/50", score: 1, bias: "PUT", detail: "Stacked bearish" };
+  else trend = { name: "Trend EMA 9/21/50", score: 0.3, bias: e9 > e21 ? "CALL" : "PUT", detail: "Mixed / ranging" };
+
+  // 2. RSI
+  const r = rsi(recent, 14);
+  let mom: SignalPart;
+  if (r > 75) mom = { name: "RSI 14", score: 0.6, bias: "PUT", detail: `${r.toFixed(0)} overbought` };
+  else if (r < 25) mom = { name: "RSI 14", score: 0.6, bias: "CALL", detail: `${r.toFixed(0)} oversold` };
+  else if (r >= 52) mom = { name: "RSI 14", score: Math.min(1, (r - 50) / 20), bias: "CALL", detail: `${r.toFixed(0)} bullish` };
+  else if (r <= 48) mom = { name: "RSI 14", score: Math.min(1, (50 - r) / 20), bias: "PUT", detail: `${r.toFixed(0)} bearish` };
+  else mom = { name: "RSI 14", score: 0, bias: null, detail: `${r.toFixed(0)} neutral` };
+
+  // 3. SMC: last unmitigated FVG + order block
+  const cs = candles(recent, 5);
+  let smc: SignalPart = { name: "SMC FVG / OB", score: 0, bias: null, detail: "No structure" };
+  for (let i = cs.length - 1; i >= 2; i--) {
+    const a = cs[i - 2]!, c = cs[i]!;
+    if (c.l > a.h && last > a.h) { smc = { name: "SMC FVG / OB", score: 0.8, bias: "CALL", detail: "Bullish FVG holding" }; break; }
+    if (c.h < a.l && last < a.l) { smc = { name: "SMC FVG / OB", score: 0.8, bias: "PUT", detail: "Bearish FVG holding" }; break; }
+  }
+  const n = cs.length;
+  if (n >= 3) {
+    const p = cs[n - 3]!, q = cs[n - 2]!, z = cs[n - 1]!;
+    if (p.c < p.o && q.c > q.o && z.c > p.h) smc = { name: "SMC FVG / OB", score: 1, bias: "CALL", detail: "Bullish order block break" };
+    else if (p.c > p.o && q.c < q.o && z.c < p.l) smc = { name: "SMC FVG / OB", score: 1, bias: "PUT", detail: "Bearish order block break" };
+  }
+
+  // 4. Tick velocity
+  const t = prices.slice(-11);
   let ups = 0;
-  for (let i = 1; i < last10.length; i++) if ((last10[i] ?? 0) > (last10[i - 1] ?? 0)) ups++;
-  const upRatio = ups / 10;
-  const spread = Math.abs(fast - slow) / (Math.abs(slow) || 1);
-  const strength = Math.min(1, spread * 4000);
-  const bullish = fast > slow;
-  const agree = bullish ? upRatio : 1 - upRatio;
-  const confidence = Math.round((0.55 * strength + 0.45 * agree) * 100);
-  return {
-    dir: bullish ? "CALL" : "PUT",
-    confidence,
-    note: `EMA5 ${bullish ? ">" : "<"} EMA21 · ${ups}/10 up ticks`,
-  };
+  for (let i = 1; i < t.length; i++) if ((t[i] ?? 0) > (t[i - 1] ?? 0)) ups++;
+  const vel: SignalPart = ups >= 6
+    ? { name: "Tick velocity", score: (ups - 5) / 5, bias: "CALL", detail: `${ups}/10 up` }
+    : ups <= 4 ? { name: "Tick velocity", score: (5 - ups) / 5, bias: "PUT", detail: `${ups}/10 up` }
+    : { name: "Tick velocity", score: 0, bias: null, detail: "5/10 flat" };
+
+  const parts = [trend, mom, smc, vel];
+  const w = [0.35, 0.2, 0.3, 0.15];
+  let up = 0, down = 0;
+  parts.forEach((p, i) => { if (p.bias === "CALL") up += p.score * w[i]!; else if (p.bias === "PUT") down += p.score * w[i]!; });
+  const dir: Direction = up >= down ? "CALL" : "PUT";
+  const confidence = Math.max(0, Math.round((Math.max(up, down) - Math.min(up, down) * 0.5) * 100));
+  const agreeing = parts.filter((p) => p.bias === dir).length;
+  return { dir, confidence, note: `${agreeing}/4 signals agree`, parts };
 }
