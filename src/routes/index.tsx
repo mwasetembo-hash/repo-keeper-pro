@@ -39,7 +39,7 @@ function Dashboard() {
   const [mode, setMode] = useState<Mode>("TREND");
   const [stake, setStake] = useState(1);
   const [duration, setDuration] = useState(5);
-  const [minConf, setMinConf] = useState(60);
+  const [minConf, setMinConf] = useState(75);
   const [martingale, setMartingale] = useState(1);
   const [maxLoss, setMaxLoss] = useState(20);
   const [takeProfit, setTakeProfit] = useState(10);
@@ -112,7 +112,7 @@ function Dashboard() {
       if (tickSub.current) await c.send({ forget: tickSub.current }).catch(() => {});
       setPrices([]);
       try {
-        const h = await c.send({ ticks_history: symbol, count: 120, end: "latest", style: "ticks" });
+        const h = await c.send({ ticks_history: symbol, count: 300, end: "latest", style: "ticks" });
         setPrices((h.history.prices as number[]).map(Number));
         const r = await c.send({ ticks: symbol, subscribe: 1 });
         tickSub.current = r.subscription?.id ?? null;
