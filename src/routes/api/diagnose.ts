@@ -18,6 +18,7 @@ export const Route = createFileRoute("/api/diagnose")({
         if (!report) return new Response("Please describe the error.", { status: 400 });
 
         // Provider chain: Lovable AI Gateway → direct OpenAI → xAI (OpenAI-compatible).
+        let runId: string | undefined;
         const chain: { id: string; provider: ReturnType<typeof createOpenAI>; model: string }[] = [];
         const gatewayKey = process.env["LOVABLE_API_KEY"];
         if (gatewayKey) {
@@ -57,28 +58,42 @@ export const Route = createFileRoute("/api/diagnose")({
 
         for (const entry of chain) {
           try {
+            if (entry.id === "gateway") {
+              const result = streamText({
+                model: entry.provider.responses(entry.model),
+                system: INSTRUCTIONS,
+                messages: [{ role: "user", content: report }],
+                abortSignal: request.signal,
+                maxRetries: 0,
+                providerOptions: {
+                  openai: {
+                    forceReasoning: true,
+                    reasoningEffort: "low",
+                    reasoningSummary: "auto",
+                    store: false,
+                    include: ["reasoning.encrypted_content"],
+                  },
+                },
+                onError: ({ error }) => console.error(`diagnose error [${entry.id}]`, error),
+              });
+              const res = result.toTextStreamResponse({
+                headers: { "Cache-Control": "no-cache, no-transform" },
+              });
+              if (runId) res.headers.set(RUN, runId);
+              return res;
+            }
+            // Direct OpenAI / xAI: plain chat-completions streaming, no gateway extras.
             const result = streamText({
-              model: entry.provider.responses(entry.model),
+              model: entry.provider(entry.model),
               system: INSTRUCTIONS,
               messages: [{ role: "user", content: report }],
               abortSignal: request.signal,
               maxRetries: 0,
-              providerOptions: {
-                openai: {
-                  forceReasoning: true,
-                  reasoningEffort: "low",
-                  reasoningSummary: "auto",
-                  store: false,
-                  include: ["reasoning.encrypted_content"],
-                },
-              },
               onError: ({ error }) => console.error(`diagnose error [${entry.id}]`, error),
             });
-            const res = result.toTextStreamResponse({
+            return result.toTextStreamResponse({
               headers: { "Cache-Control": "no-cache, no-transform" },
             });
-            if (runId) res.headers.set(RUN, runId);
-            return res;
           } catch (err) {
             console.error(`provider [${entry.id}] unavailable, trying next`, err);
           }
