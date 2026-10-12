@@ -36,7 +36,7 @@ function Dashboard() {
   const [accounts, setAccounts] = useState<DerivAccount[]>([]);
   const [accountId, setAccountId] = useState("");
   const [balance, setBalance] = useState<number | null>(null);
-  const [instruments, setInstruments] = useState<(Inst & { open?: boolean; pip?: number })[]>(CATALOG);
+  const [instruments, setInstruments] = useState<(Inst & { open?: boolean; pip?: number | undefined })[]>(CATALOG);
   const [symbol, setSymbol] = useState("R_75");
   const [prices, setPrices] = useState<number[]>([]);
   const [kind, setKind] = useState<Kind>("RISE_FALL");
