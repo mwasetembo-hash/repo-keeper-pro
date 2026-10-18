@@ -64,8 +64,16 @@ function Dashboard() {
   const [log, setLog] = useState<string[]>([]);
   const [scan, setScan] = useState<ScanRow[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [brs, setBrs] = useState(false);
+  const [brsStep, setBrsStep] = useState(0);
+  const [brsLevels, setBrsLevels] = useState(3);
+  const [brsMult, setBrsMult] = useState(3.75);
+  const [engine, setEngine] = useState<EngineId>("A");
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profileName, setProfileName] = useState("");
   const curStake = useRef(1);
   const streak = useRef(0);
+  const brsLevel = useRef(0);
   const tickSub = useRef<string | null>(null);
 
   const addLog = (m: string) => setLog((l) => [`${new Date().toLocaleTimeString()} ${m}`, ...l].slice(0, 80));
