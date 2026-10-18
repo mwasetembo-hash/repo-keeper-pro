@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DerivClient, computeSignal, fetchAccounts, fetchOtpUrl, type DerivAccount } from "@/lib/deriv";
 import { CATALOG, CONTRACTS, digitStats, groupOf, kindSignal, trendStrength, type Inst, type Kind } from "@/lib/contracts";
+import { BRS_PHASES, ENGINES, brsPhaseLabel, journal, runEngine, type EngineId } from "@/lib/engines";
 import { DiagnosePanel } from "@/components/DiagnosePanel";
 
 export const Route = createFileRoute("/")({
@@ -24,7 +25,9 @@ type ScanRow = { symbol: string; name: string; group: string; trend: number; con
 type Unit = "t" | "s" | "m";
 
 const LS = "mwase-deriv-config";
+const LS_PROFILES = "mwase-deriv-profiles";
 const GROUPS = ["Forex", "Gold & Metals", "Commodities", "Stock Indices", "Crypto", "Derived"];
+type Profile = { name: string; settings: Record<string, unknown> };
 
 function Dashboard() {
   const client = useRef<DerivClient | null>(null);
