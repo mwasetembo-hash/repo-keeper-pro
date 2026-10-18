@@ -311,10 +311,26 @@ function Dashboard() {
     if (net >= takeProfit) { setAuto(false); addLog("Stopped: profit target reached"); return; }
     if (trades.length >= maxTrades) { setAuto(false); addLog("Stopped: max trades reached"); return; }
     if (streak.current >= lossStreakStop) { setAuto(false); addLog(`Stopped: ${streak.current} losses in a row`); return; }
+    const amt = curStake.current;
+    if (brs) {
+      placeBrsTrade(brsStep, amt).then((r) => {
+        if (r == null) return;
+        streak.current = r > 0 ? 0 : streak.current + 1;
+        if (r > 0) {
+          brsLevel.current = 0;
+          curStake.current = stake;
+          setBrsStep((s) => s + 1);
+        } else {
+          brsLevel.current += 1;
+          if (brsLevel.current >= brsLevels) { setAuto(false); addLog(`Stopped: ${brsLevels} recovery levels used`); return; }
+          curStake.current = Math.min(amt * brsMult, maxStake);
+        }
+      });
+      return;
+    }
     if (sig.side === null || sig.confidence < minConf) return;
     if (mode === "SIDE_A" && sig.side !== 0) return;
     if (mode === "SIDE_B" && sig.side !== 1) return;
-    const amt = curStake.current;
     placeTrade(sig.side, amt).then((r) => {
       if (r == null) return;
       streak.current = r > 0 ? 0 : streak.current + 1;
