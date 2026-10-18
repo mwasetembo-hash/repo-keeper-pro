@@ -534,6 +534,19 @@ function Dashboard() {
             {num(takeProfit, setTakeProfit, "Profit target")}
             {num(maxTrades, setMaxTrades, "Max trades")}
           </div>
+          <div className="rounded-md border border-border p-2">
+            <label className="flex items-center gap-2 text-xs font-semibold">
+              <input type="checkbox" checked={brs} onChange={(e) => setBrs(e.target.checked)} />
+              Phased digit cycle (Differs 5 → Over 2 → Under 7, 1 tick)
+            </label>
+            {brs && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {num(brsLevels, (n) => setBrsLevels(Math.max(1, Math.min(7, Math.round(n)))), "Max recovery levels")}
+                {num(brsMult, (n) => setBrsMult(Math.max(1, n)), "Recovery multiplier", 0.05)}
+                <div className="col-span-2 text-xs text-muted-foreground">Next phase: {brsPhaseLabel(brsStep)} · Recovery level {brsLevel.current}/{brsLevels}</div>
+              </div>
+            )}
+          </div>
           {auto ? (
             <button onClick={() => { setAuto(false); addLog("Autopilot OFF"); }} className="w-full rounded-md bg-down py-3 font-bold text-primary-foreground">STOP AUTOPILOT</button>
           ) : (
