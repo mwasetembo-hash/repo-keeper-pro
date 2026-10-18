@@ -88,7 +88,50 @@ function Dashboard() {
       if (c.token) setToken(c.token);
       if (c.accountId) setAccountId(c.accountId);
     } catch {}
+    try { setProfiles(JSON.parse(localStorage.getItem(LS_PROFILES) || "[]")); } catch {}
   }, []);
+
+  const currentSettings = () => ({ appId, token, accountId, symbol, kind, mode, stake, duration, unit, digit, offset, hi, lo, minConf, martingale, maxLoss, takeProfit, maxTrades, maxStake, lossStreakStop, brs, brsLevels, brsMult });
+
+  const applySettings = (s: Record<string, unknown>) => {
+    const setters: Record<string, (v: any) => void> = { appId: setAppId, token: setToken, accountId: setAccountId, symbol: setSymbol, kind: setKind, mode: setMode, stake: setStake, duration: setDuration, unit: setUnit, digit: setDigit, offset: setOffset, hi: setHi, lo: setLo, minConf: setMinConf, martingale: setMartingale, maxLoss: setMaxLoss, takeProfit: setTakeProfit, maxTrades: setMaxTrades, maxStake: setMaxStake, lossStreakStop: setLossStreakStop, brs: setBrs, brsLevels: setBrsLevels, brsMult: setBrsMult };
+    for (const [k, v] of Object.entries(s)) setters[k]?.(v);
+    addLog("Profile loaded");
+  };
+
+  const saveProfile = () => {
+    const name = profileName.trim();
+    if (!name) return;
+    const next = [...profiles.filter((p) => p.name !== name), { name, settings: currentSettings() }];
+    setProfiles(next);
+    localStorage.setItem(LS_PROFILES, JSON.stringify(next));
+    setProfileName("");
+    addLog(`Profile "${name}" saved`);
+  };
+
+  const exportProfiles = () => {
+    const blob = new Blob([JSON.stringify(profiles, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "mwase-bot-profiles.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const importProfiles = (file: File) => {
+    file.text().then((t) => {
+      const parsed = JSON.parse(t) as Profile[];
+      if (!Array.isArray(parsed)) throw new Error("bad file");
+      const merged = [...profiles];
+      for (const p of parsed) if (p?.name && p?.settings) {
+        const i = merged.findIndex((m) => m.name === p.name);
+        i >= 0 ? (merged[i] = p) : merged.push(p);
+      }
+      setProfiles(merged);
+      localStorage.setItem(LS_PROFILES, JSON.stringify(merged));
+      addLog(`Imported ${parsed.length} profile(s)`);
+    }).catch(() => addLog("Import failed: not a valid profiles file"));
+  };
 
   // Digit contracts need ticks
   useEffect(() => { if (def.digits) { setUnit("t"); setDuration((d) => Math.min(10, Math.max(1, d))); } }, [kind]); // eslint-disable-line react-hooks/exhaustive-deps
