@@ -261,6 +261,50 @@ function Dashboard() {
     } finally { setBusy(false); }
   }, [account, duration, unit, symbol, def, digit, offset, hi, lo]);
 
+  /** Places one phased digit contract (Differs → Over 2 → Under 7 cycle), 1 tick. */
+  const placeBrsTrade = useCallback(async (step: number, amount: number) => {
+    const c = client.current;
+    if (!c || !account) return null;
+    const phase = BRS_PHASES[step % BRS_PHASES.length]!;
+    setBusy(true);
+    try {
+      const p = await c.send({
+        proposal: 1, amount: Number(amount.toFixed(2)), basis: "stake", contract_type: phase.kind,
+        currency: account.currency, duration: 1, duration_unit: "t", underlying_symbol: symbol, barrier: String(phase.barrier),
+      });
+      const b = await c.send({ buy: p.proposal.id, price: Number(amount.toFixed(2)) });
+      const id = b.buy.contract_id as number;
+      setTrades((t) => [{ id, label: `BRS ${phase.label}`, stake: amount, profit: null, symbol, time: new Date().toLocaleTimeString() }, ...t]);
+      addLog(`BUY BRS ${phase.label} ${amount.toFixed(2)} on ${symbol} #${id}`);
+      const result = await new Promise<number>((resolve) => {
+        const off = c.on("proposal_open_contract", (m) => {
+          const poc = m.proposal_open_contract;
+          if (poc.contract_id === id && poc.is_sold) { off(); resolve(Number(poc.profit)); }
+        });
+        c.send({ proposal_open_contract: 1, contract_id: id, subscribe: 1 }).catch(() => {});
+      });
+      setTrades((t) => t.map((x) => (x.id === id ? { ...x, profit: result } : x)));
+      addLog(`${result > 0 ? "WIN" : "LOSS"} #${id}: ${result.toFixed(2)}`);
+      return result;
+    } catch (e: any) {
+      addLog(`Order error: ${e.message}`);
+      setError(e.message);
+      return null;
+    } finally { setBusy(false); }
+  }, [account, symbol]);
+
+  /** Fires n orders of the given side(s) together; each settles separately. */
+  const bulkTrade = (side: 0 | 1 | "both", n: number) => {
+    if (status !== "on") return;
+    const jobs: Promise<unknown>[] = [];
+    for (let i = 0; i < n; i++) {
+      if (side === 0 || side === "both") jobs.push(placeTrade(0, stake));
+      if (side === 1 || side === "both") jobs.push(placeTrade(1, stake));
+    }
+    addLog(`Bulk execute: ${jobs.length} orders dispatched`);
+    void Promise.allSettled(jobs);
+  };
+
   useEffect(() => {
     if (!auto || busy || status !== "on") return;
     if (net <= -maxLoss) { setAuto(false); addLog("Stopped: loss limit reached"); return; }
