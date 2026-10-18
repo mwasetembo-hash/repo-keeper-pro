@@ -351,6 +351,11 @@ function Dashboard() {
   const min = Math.min(...view), max = Math.max(...view);
   const pts = view.map((p, i) => `${i * 4},${100 - ((p - min) / (max - min || 1)) * 100}`).join(" ");
 
+  const engineStats = (Object.keys(ENGINES) as EngineId[]).map((id) => ({ id, ...runEngine(id, prices) }));
+  const j = journal(trades);
+  const eqMin = Math.min(0, ...j.curve), eqMax = Math.max(0, ...j.curve);
+  const eqPts = j.curve.map((v, i) => `${(i / Math.max(1, j.curve.length - 1)) * 200},${40 - ((v - eqMin) / (eqMax - eqMin || 1)) * 40}`).join(" ");
+
   const field = "rounded-md border border-input bg-background px-2 py-1.5 font-mono text-sm text-foreground";
   const num = (v: number, set: (n: number) => void, label: string, step = 1) => (
     <label className="flex flex-col gap-1 text-xs text-muted-foreground">
