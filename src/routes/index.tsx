@@ -593,6 +593,57 @@ function Dashboard() {
           </div>
         </section>
 
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h2 className="mb-2 font-semibold">Saved settings</h2>
+          <div className="flex gap-2">
+            <input value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="Profile name" className={field} />
+            <button onClick={saveProfile} className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground">Save</button>
+          </div>
+          <div className="mt-2 space-y-1">
+            {profiles.length === 0 && <p className="text-xs text-muted-foreground">No saved profiles yet.</p>}
+            {profiles.map((p) => (
+              <div key={p.name} className="flex items-center justify-between gap-2 text-sm">
+                <span className="truncate">{p.name}</span>
+                <span className="flex gap-1">
+                  <button onClick={() => applySettings(p.settings)} className="rounded border border-primary px-2 text-xs text-primary">Load</button>
+                  <button onClick={() => { const next = profiles.filter((x) => x.name !== p.name); setProfiles(next); localStorage.setItem(LS_PROFILES, JSON.stringify(next)); }} className="rounded border border-down px-2 text-xs text-down">✕</button>
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2 text-xs">
+            <button onClick={exportProfiles} disabled={!profiles.length} className="rounded border border-border px-2 py-1 disabled:opacity-40">Export file</button>
+            <label className="cursor-pointer rounded border border-border px-2 py-1">
+              Import file
+              <input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importProfiles(e.target.files[0])} />
+            </label>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
+          <h2 className="mb-2 font-semibold">Performance journal</h2>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {[
+              ["Win rate", j.winRate == null ? "—" : `${j.winRate.toFixed(0)}%`],
+              ["Profit factor", j.profitFactor == null ? "—" : j.profitFactor === Infinity ? "∞" : j.profitFactor.toFixed(2)],
+              ["Max drawdown", j.maxDrawdown.toFixed(2)],
+              ["Best / worst streak", `${j.bestWin}W / ${j.bestLoss}L`],
+            ].map(([k, v]) => (
+              <div key={k}>
+                <div className="text-xs text-muted-foreground">{k}</div>
+                <div className="font-mono text-lg font-semibold">{v}</div>
+              </div>
+            ))}
+          </div>
+          {j.curve.length > 1 ? (
+            <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="mt-3 h-20 w-full">
+              <polyline points={eqPts} fill="none" stroke="var(--primary)" strokeWidth="1.5" />
+            </svg>
+          ) : (
+            <p className="mt-3 text-xs text-muted-foreground">Equity curve appears after trades settle.</p>
+          )}
+        </section>
+
         <section className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
           <h2 className="mb-2 font-semibold">Activity log</h2>
           <div className="max-h-80 overflow-auto font-mono text-xs text-muted-foreground">
