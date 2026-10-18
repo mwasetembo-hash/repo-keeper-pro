@@ -469,7 +469,39 @@ function Dashboard() {
                 <button disabled={status !== "on" || busy} onClick={() => placeTrade(1, stake)} className="rounded-md bg-down px-5 py-3 font-bold text-primary-foreground disabled:opacity-40">{def.sides[1]}</button>
               </div>
             </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button disabled={status !== "on"} onClick={() => bulkTrade(0, 9)} className="rounded-md border border-up px-3 py-1.5 text-xs font-semibold text-up disabled:opacity-40">9× {def.sides[0]}</button>
+              <button disabled={status !== "on"} onClick={() => bulkTrade(1, 9)} className="rounded-md border border-down px-3 py-1.5 text-xs font-semibold text-down disabled:opacity-40">9× {def.sides[1]}</button>
+              <button disabled={status !== "on"} onClick={() => bulkTrade("both", 9)} className="rounded-md border border-primary px-3 py-1.5 text-xs font-semibold text-primary disabled:opacity-40">⚡ 9× Double (both sides)</button>
+              <span className="text-xs text-muted-foreground">9 orders per side · dispatched together · separate confirmations</span>
+            </div>
           </div>
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-4 lg:col-span-3">
+          <h2 className="mb-1 font-semibold">Demo strategy comparison <span className="text-xs font-normal text-muted-foreground">— paper trades on live ticks, no real orders</span></h2>
+          <div className="grid gap-3 md:grid-cols-3">
+            {engineStats.map((e) => {
+              const settledN = e.wins + e.losses;
+              const wr = settledN ? Math.round((e.wins / settledN) * 100) : null;
+              return (
+                <button key={e.id} onClick={() => setEngine(e.id)} className={`rounded-lg border p-3 text-left ${engine === e.id ? "border-primary bg-primary/10" : "border-border"}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">Engine {e.id}: {ENGINES[e.id].name}</span>
+                    <span className={`font-mono text-sm ${e.net >= 0 ? "text-up" : "text-down"}`}>{e.net.toFixed(2)}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">{ENGINES[e.id].desc}</div>
+                  <div className="mt-2 grid grid-cols-3 gap-1 font-mono text-xs">
+                    <span>{e.wins}W / {e.losses}L / {e.flat} flat</span>
+                    <span>Win rate {wr == null ? "—" : `${wr}%`}</span>
+                    <span>Pending {e.pending}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">{e.note}</div>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Engine {engine} selected. Paper results use a fixed 1-unit stake and 0.95 payout over {prices.length} ticks — they are estimates, not guarantees.</p>
         </section>
 
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
