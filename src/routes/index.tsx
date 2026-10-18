@@ -374,6 +374,19 @@ function Dashboard() {
         </div>
       </header>
 
+      {scan.length > 0 && (
+        <div className="overflow-hidden border-b border-border bg-card py-1.5">
+          <div className="flex animate-pulse flex-wrap gap-x-6 gap-y-1 px-4 font-mono text-xs">
+            {scan.slice(0, 20).map((r) => (
+              <button key={r.symbol} onClick={() => setSymbol(r.symbol)} className="flex gap-1.5">
+                <span className="text-muted-foreground">{r.name}</span>
+                <span className={r.dir === "UP" ? "text-up" : r.dir === "DOWN" ? "text-down" : ""}>{r.dir === "UP" ? "▲" : r.dir === "DOWN" ? "▼" : "•"} {r.conf}%</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <main className="mx-auto grid max-w-7xl gap-4 p-4 lg:grid-cols-3">
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
           <h2 className="font-semibold">Deriv connection</h2>
