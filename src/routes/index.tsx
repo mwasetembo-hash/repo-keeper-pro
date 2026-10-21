@@ -64,6 +64,8 @@ function Dashboard() {
   const [log, setLog] = useState<string[]>([]);
   const [scan, setScan] = useState<ScanRow[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [autoScan, setAutoScan] = useState(false);
+  const [autoSwitch, setAutoSwitch] = useState(false);
   const [brs, setBrs] = useState(false);
   const [brsStep, setBrsStep] = useState(0);
   const [brsLevels, setBrsLevels] = useState(3);
@@ -207,7 +209,7 @@ function Dashboard() {
     })();
   }, [symbol, status]);
 
-  const runScan = async () => {
+  const runScan = useCallback(async (followBest = false) => {
     const c = client.current;
     if (!c) return;
     setScanning(true);
@@ -224,7 +226,20 @@ function Dashboard() {
     }
     setScanning(false);
     addLog(`Scan done: ${rows.length} instruments ranked`);
-  };
+    const best = rows.sort((a, b) => b.conf + b.trend - (a.conf + a.trend))[0];
+    if (followBest && best && best.symbol !== symbolRef.current) {
+      setSymbol(best.symbol);
+      addLog(`Switched to best market: ${best.name} (${best.dir} ${best.conf}%)`);
+    }
+  }, [instruments]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-scan: re-rank every market every 60s; optionally follow the best one.
+  useEffect(() => {
+    if (!autoScan || status !== "on") return;
+    void runScan(autoSwitch);
+    const t = setInterval(() => void runScan(autoSwitch), 60000);
+    return () => clearInterval(t);
+  }, [autoScan, autoSwitch, status, runScan]);
 
   const placeTrade = useCallback(async (side: 0 | 1, amount: number) => {
     const c = client.current;
@@ -348,6 +363,7 @@ function Dashboard() {
     streak.current = 0;
     setAuto(true);
     addLog(`Autopilot ON (${def.label})`);
+    if (autoSwitch && !scan.length) void runScan(true);
   };
 
   const last = prices[prices.length - 1];
@@ -594,11 +610,21 @@ function Dashboard() {
         </section>
 
         <section className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold">Market scanner</h2>
-            <button disabled={status !== "on" || scanning} onClick={runScan} className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-40">
-              {scanning ? `Scanning… ${scan.length}` : "Scan all markets"}
-            </button>
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <label className="flex items-center gap-1.5">
+                <input type="checkbox" checked={autoScan} onChange={(e) => setAutoScan(e.target.checked)} disabled={status !== "on"} />
+                Auto-scan every 60s
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input type="checkbox" checked={autoSwitch} onChange={(e) => setAutoSwitch(e.target.checked)} disabled={!autoScan} />
+                Follow best market
+              </label>
+              <button disabled={status !== "on" || scanning} onClick={() => void runScan()} className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-40">
+                {scanning ? `Scanning… ${scan.length}` : "Scan all markets"}
+              </button>
+            </div>
           </div>
           {status !== "on" && <p className="text-xs text-muted-foreground">Connect to rank all {instruments.length} instruments by trend strength and signal confidence.</p>}
           <div className="max-h-80 overflow-auto">
