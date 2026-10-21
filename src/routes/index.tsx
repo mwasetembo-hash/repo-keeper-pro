@@ -102,7 +102,8 @@ function Dashboard() {
   const saveProfile = () => {
     const name = profileName.trim();
     if (!name) return;
-    const next = [...profiles.filter((p) => p.name !== name), { name, settings: currentSettings() }];
+    const { appId: _a, token: _t, accountId: _c, ...safe } = currentSettings();
+    const next = [...profiles.filter((p) => p.name !== name), { name, settings: safe }];
     setProfiles(next);
     localStorage.setItem(LS_PROFILES, JSON.stringify(next));
     setProfileName("");
