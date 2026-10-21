@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DerivClient, computeSignal, fetchAccounts, fetchOtpUrl, type DerivAccount } from "@/lib/deriv";
-import { CATALOG, CONTRACTS, digitStats, groupOf, kindSignal, trendStrength, type Inst, type Kind } from "@/lib/contracts";
+import { CATALOG, CONTRACTS, allSignals, digitStats, groupOf, kindSignal, trendStrength, type Inst, type Kind } from "@/lib/contracts";
 import { BRS_PHASES, ENGINES, brsPhaseLabel, journal, runEngine, type EngineId } from "@/lib/engines";
 import { DiagnosePanel } from "@/components/DiagnosePanel";
 
@@ -31,7 +31,7 @@ type Profile = { name: string; settings: Record<string, unknown> };
 
 function Dashboard() {
   const client = useRef<DerivClient | null>(null);
-  const [appId, setAppId] = useState("");
+  const [appId, setAppId] = useState("34ARk0NOmxpaMAqV6Bwgg");
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<"off" | "connecting" | "on">("off");
   const [error, setError] = useState("");
