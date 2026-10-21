@@ -102,7 +102,8 @@ function Dashboard() {
   const saveProfile = () => {
     const name = profileName.trim();
     if (!name) return;
-    const next = [...profiles.filter((p) => p.name !== name), { name, settings: currentSettings() }];
+    const { appId: _a, token: _t, accountId: _c, ...safe } = currentSettings();
+    const next = [...profiles.filter((p) => p.name !== name), { name, settings: safe }];
     setProfiles(next);
     localStorage.setItem(LS_PROFILES, JSON.stringify(next));
     setProfileName("");
@@ -296,6 +297,8 @@ function Dashboard() {
   /** Fires n orders of the given side(s) together; each settles separately. */
   const bulkTrade = (side: 0 | 1 | "both", n: number) => {
     if (status !== "on") return;
+    const total = (side === "both" ? 2 : 1) * n * stake;
+    if (!account?.isVirtual && !window.confirm(`REAL account: place ${side === "both" ? n * 2 : n} orders totalling ${total.toFixed(2)} ${account?.currency ?? ""}?`)) return;
     const jobs: Promise<unknown>[] = [];
     for (let i = 0; i < n; i++) {
       if (side === 0 || side === "both") jobs.push(placeTrade(0, stake));
