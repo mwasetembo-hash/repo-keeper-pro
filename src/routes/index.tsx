@@ -64,6 +64,8 @@ function Dashboard() {
   const [log, setLog] = useState<string[]>([]);
   const [scan, setScan] = useState<ScanRow[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [autoScan, setAutoScan] = useState(false);
+  const [autoSwitch, setAutoSwitch] = useState(false);
   const [brs, setBrs] = useState(false);
   const [brsStep, setBrsStep] = useState(0);
   const [brsLevels, setBrsLevels] = useState(3);
@@ -207,7 +209,7 @@ function Dashboard() {
     })();
   }, [symbol, status]);
 
-  const runScan = async () => {
+  const runScan = useCallback(async (followBest = false) => {
     const c = client.current;
     if (!c) return;
     setScanning(true);
@@ -224,7 +226,20 @@ function Dashboard() {
     }
     setScanning(false);
     addLog(`Scan done: ${rows.length} instruments ranked`);
-  };
+    const best = rows.sort((a, b) => b.conf + b.trend - (a.conf + a.trend))[0];
+    if (followBest && best && best.symbol !== symbolRef.current) {
+      setSymbol(best.symbol);
+      addLog(`Switched to best market: ${best.name} (${best.dir} ${best.conf}%)`);
+    }
+  }, [instruments]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-scan: re-rank every market every 60s; optionally follow the best one.
+  useEffect(() => {
+    if (!autoScan || status !== "on") return;
+    void runScan(autoSwitch);
+    const t = setInterval(() => void runScan(autoSwitch), 60000);
+    return () => clearInterval(t);
+  }, [autoScan, autoSwitch, status, runScan]);
 
   const placeTrade = useCallback(async (side: 0 | 1, amount: number) => {
     const c = client.current;
