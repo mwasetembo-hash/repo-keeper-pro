@@ -363,6 +363,7 @@ function Dashboard() {
     streak.current = 0;
     setAuto(true);
     addLog(`Autopilot ON (${def.label})`);
+    if (autoSwitch && !scan.length) void runScan(true);
   };
 
   const last = prices[prices.length - 1];
@@ -609,11 +610,21 @@ function Dashboard() {
         </section>
 
         <section className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold">Market scanner</h2>
-            <button disabled={status !== "on" || scanning} onClick={runScan} className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-40">
-              {scanning ? `Scanning… ${scan.length}` : "Scan all markets"}
-            </button>
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <label className="flex items-center gap-1.5">
+                <input type="checkbox" checked={autoScan} onChange={(e) => setAutoScan(e.target.checked)} disabled={status !== "on"} />
+                Auto-scan every 60s
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input type="checkbox" checked={autoSwitch} onChange={(e) => setAutoSwitch(e.target.checked)} disabled={!autoScan} />
+                Follow best market
+              </label>
+              <button disabled={status !== "on" || scanning} onClick={() => void runScan()} className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-40">
+                {scanning ? `Scanning… ${scan.length}` : "Scan all markets"}
+              </button>
+            </div>
           </div>
           {status !== "on" && <p className="text-xs text-muted-foreground">Connect to rank all {instruments.length} instruments by trend strength and signal confidence.</p>}
           <div className="max-h-80 overflow-auto">
