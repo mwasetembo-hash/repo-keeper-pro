@@ -297,6 +297,8 @@ function Dashboard() {
   /** Fires n orders of the given side(s) together; each settles separately. */
   const bulkTrade = (side: 0 | 1 | "both", n: number) => {
     if (status !== "on") return;
+    const total = (side === "both" ? 2 : 1) * n * stake;
+    if (!account?.isVirtual && !window.confirm(`REAL account: place ${side === "both" ? n * 2 : n} orders totalling ${total.toFixed(2)} ${account?.currency ?? ""}?`)) return;
     const jobs: Promise<unknown>[] = [];
     for (let i = 0; i < n; i++) {
       if (side === 0 || side === "both") jobs.push(placeTrade(0, stake));
