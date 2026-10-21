@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DerivClient, computeSignal, fetchAccounts, fetchOtpUrl, type DerivAccount } from "@/lib/deriv";
-import { CATALOG, CONTRACTS, digitStats, groupOf, kindSignal, trendStrength, type Inst, type Kind } from "@/lib/contracts";
+import { CATALOG, CONTRACTS, allSignals, digitStats, groupOf, kindSignal, trendStrength, type Inst, type Kind } from "@/lib/contracts";
 import { BRS_PHASES, ENGINES, brsPhaseLabel, journal, runEngine, type EngineId } from "@/lib/engines";
 import { DiagnosePanel } from "@/components/DiagnosePanel";
 
@@ -31,7 +31,7 @@ type Profile = { name: string; settings: Record<string, unknown> };
 
 function Dashboard() {
   const client = useRef<DerivClient | null>(null);
-  const [appId, setAppId] = useState("");
+  const [appId, setAppId] = useState("34ARk0NOmxpaMAqV6Bwgg");
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<"off" | "connecting" | "on">("off");
   const [error, setError] = useState("");
@@ -144,6 +144,7 @@ function Dashboard() {
   const sig = kindSignal(kind, prices, decimals, { digit, offset, hi, lo, ticks: ticksEq });
   const base = computeSignal(prices);
   const stats = def.digits ? digitStats(prices, decimals) : null;
+  const matrix = allSignals(prices, decimals, { offset, hi, lo, ticks: ticksEq }).sort((a, b) => b.confidence - a.confidence);
 
   const connect = async () => {
     setError("");
@@ -491,6 +492,27 @@ function Dashboard() {
               <button disabled={status !== "on"} onClick={() => bulkTrade("both", 9)} className="rounded-md border border-primary px-3 py-1.5 text-xs font-semibold text-primary disabled:opacity-40">⚡ 9× Double (both sides)</button>
               <span className="text-xs text-muted-foreground">9 orders per side · dispatched together · separate confirmations</span>
             </div>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-4 lg:col-span-3">
+          <h2 className="mb-1 font-semibold">All signals — every contract type on {symbol} <span className="text-xs font-normal text-muted-foreground">(digit contracts scan barriers 0-9)</span></h2>
+          <div className="overflow-auto">
+            <table className="w-full font-mono text-xs">
+              <thead className="text-muted-foreground"><tr><th className="text-left">Contract</th><th className="text-left">Best parameter</th><th className="text-left">Signal</th><th>Conf</th><th className="text-left">Reason</th><th /></tr></thead>
+              <tbody>
+                {matrix.map((r) => (
+                  <tr key={r.kind} className={`border-t border-border ${r.confidence >= minConf ? "bg-primary/10" : ""}`}>
+                    <td className="py-1">{CONTRACTS[r.kind].label}</td>
+                    <td>{r.param}</td>
+                    <td className={`font-bold ${r.side === 0 ? "text-up" : r.side === 1 ? "text-down" : ""}`}>{r.side === null ? "WAIT" : CONTRACTS[r.kind].sides[r.side]}</td>
+                    <td className="text-center">{r.confidence}%</td>
+                    <td className="text-muted-foreground">{r.note}</td>
+                    <td><button onClick={() => { setKind(r.kind); if (r.digit != null) setDigit(r.digit); }} className="rounded border border-primary px-2 text-primary">Use</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
 

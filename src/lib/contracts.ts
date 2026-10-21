@@ -124,3 +124,24 @@ export function trendStrength(prices: number[]) {
   const spread = Math.abs(ema(prices, 9) - ema(prices, 50)) / (sd * 10);
   return Math.round(Math.min(100, spread * 100));
 }
+
+export type MatrixRow = { kind: Kind; param: string; side: 0 | 1 | null; confidence: number; note: string; digit?: number };
+
+/** Signals for every contract type; digit contracts are scanned across all barriers 0-9 and the strongest is kept. */
+export function allSignals(prices: number[], decimals: number, opts: { offset: number; hi: number; lo: number; ticks: number }): MatrixRow[] {
+  return (Object.keys(CONTRACTS) as Kind[]).map((kind) => {
+    const def = CONTRACTS[kind];
+    if (def.barrier === "digit") {
+      let best: MatrixRow | null = null;
+      for (let d = 0; d <= 9; d++) {
+        if (kind === "OVER_UNDER" && (d === 0 || d === 9)) continue;
+        const s = kindSignal(kind, prices, decimals, { ...opts, digit: d });
+        if (!best || s.confidence > best.confidence) best = { kind, param: `Digit ${d}`, digit: d, ...s };
+      }
+      return best!;
+    }
+    const s = kindSignal(kind, prices, decimals, { ...opts, digit: 5 });
+    const param = def.barrier === "offset" ? `Barrier ${opts.offset >= 0 ? "+" : ""}${opts.offset}` : def.barrier === "range" ? `+${opts.hi} / ${opts.lo}` : "—";
+    return { kind, param, ...s };
+  });
+}
